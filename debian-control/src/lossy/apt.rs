@@ -228,7 +228,7 @@ pub struct Source {
     /// Homepage of the source
     pub homepage: Option<String>,
 
-    #[deb822(field = "Autobuild")]
+    #[deb822(field = "Autobuild", deserialize_with = deserialize_yesno, serialize_with = serialize_yesno)]
     /// Whether the source should be autobuilt
     pub autobuild: Option<bool>,
 
@@ -754,6 +754,20 @@ Directory: pool/main/t/test-pkg
         let source: Source = source.parse().unwrap();
         assert_eq!(source.package, "test-pkg");
         assert_eq!(source.extra_source_only, Some(true));
+    }
+
+    #[test]
+    fn test_source_with_autobuild() {
+        let source = r#"Package: test-pkg
+Version: 1.0-1
+Maintainer: Test Maintainer <test@example.com>
+Autobuild: yes
+Directory: pool/non-free/t/test-pkg
+"#;
+
+        let source: Source = source.parse().unwrap();
+        assert_eq!(source.package, "test-pkg");
+        assert_eq!(source.autobuild, Some(true));
     }
 
     #[test]
