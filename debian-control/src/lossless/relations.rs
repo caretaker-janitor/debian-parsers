@@ -725,12 +725,20 @@ impl Relations {
         entry
     }
 
-    /// Helper to collect all consecutive WHITESPACE/NEWLINE/COMMENT tokens starting from a node
+    /// Helper to collect the whitespace in the consecutive WHITESPACE/NEWLINE/COMMENT
+    /// tokens starting from a node. Comment lines, with their indentation and line
+    /// break, are left out, so the result can be reused as a separator.
     fn collect_whitespace(start: Option<NodeOrToken<SyntaxNode, SyntaxToken>>) -> String {
         let mut pattern = String::new();
         let mut current = start;
         while let Some(token) = current {
-            if matches!(token.kind(), WHITESPACE | NEWLINE | COMMENT) {
+            if token.kind() == COMMENT {
+                pattern.truncate(pattern.rfind('\n').map_or(0, |i| i + 1));
+                current = token.next_sibling_or_token();
+                if current.as_ref().map(|t| t.kind()) == Some(NEWLINE) {
+                    current = current.and_then(|t| t.next_sibling_or_token());
+                }
+            } else if matches!(token.kind(), WHITESPACE | NEWLINE) {
                 if let NodeOrToken::Token(t) = &token {
                     pattern.push_str(t.text());
                 }
@@ -5623,6 +5631,36 @@ Description: test
         let entries: Vec<_> = relations.entries().collect();
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[2].to_string(), "libfoo-dev");
+    }
+
+    #[test]
+    fn test_push_does_not_copy_comment() {
+        let input = "debhelper-compat (= 13),\n# needed for the docs\npython3-sphinx";
+        let mut relations: Relations = input.parse().unwrap();
+        relations.push("foo".parse().unwrap());
+        assert_eq!(
+            relations.to_string(),
+            "debhelper-compat (= 13),\n# needed for the docs\npython3-sphinx,\nfoo"
+        );
+    }
+
+    #[test]
+    fn test_insert_does_not_copy_comment() {
+        let input = "debhelper-compat (= 13),\n# needed for the docs\npython3-sphinx";
+        let mut relations: Relations = input.parse().unwrap();
+        relations.insert(1, "foo".parse().unwrap());
+        assert_eq!(
+            relations
+                .to_string()
+                .matches("# needed for the docs")
+                .count(),
+            1
+        );
+        let entries: Vec<_> = relations.entries().map(|e| e.to_string()).collect();
+        assert_eq!(
+            entries,
+            vec!["debhelper-compat (= 13)", "foo", "python3-sphinx"]
+        );
     }
 
     #[test]
